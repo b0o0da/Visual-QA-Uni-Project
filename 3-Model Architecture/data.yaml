@@ -1,0 +1,41 @@
+path: C:/Users/Boda/Documents/GitHub/New folder/Yolo_dataset/dataset_split
+
+train: train/images
+val: val/images
+test: test/images
+
+nc: 30
+
+names:
+  [
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "airplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "stop sign",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "snowboard",
+    "sports ball",
+    "cup",
+    "chair",
+    "tv",
+    "laptop",
+    "remote",
+    "book",
+    "clock"
+  ]
