@@ -43,25 +43,8 @@ h1, h2, h3 { font-family: 'Space Mono', monospace !important; }
     margin-bottom: 24px;
     text-align: center;
 }
-.hero h1 {
-    color: #e2e8f0;
-    font-size: 28px;
-    margin-bottom: 8px;
-}
-.hero p {
-    color: #6b7280;
-    font-size: 14px;
-}
-
-.card {
-    background: linear-gradient(135deg, #1a1d28 0%, #1e2235 100%);
-    border: 1px solid #2a2d3a;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 16px;
-    transition: border-color 0.2s;
-}
-.card:hover { border-color: #5b6af0; }
+.hero h1 { color: #e2e8f0; font-size: 28px; margin-bottom: 8px; }
+.hero p  { color: #6b7280; font-size: 14px; }
 
 .answer-box {
     background: linear-gradient(135deg, #1a1d28 0%, #1e2235 100%);
@@ -94,8 +77,6 @@ h1, h2, h3 { font-family: 'Space Mono', monospace !important; }
     font-family: 'Space Mono', monospace;
     font-size: 12px;
     color: #a0aec0;
-    display: flex;
-    justify-content: space-between;
 }
 
 .section-header {
@@ -153,7 +134,7 @@ A_MAX_LEN = 12
 # ==================================
 # PATHS — غيّر دول للمسارات الصح عندك
 # ==================================
-VQA_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\3-Model Training\best_vqa_model.keras"
+VQA_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\3-Model Architecture\best_vqa_model_ft.keras"
 Q_VOCAB_PATH   = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\2-Data Analysis & Preprocessing\question_vocab_V4.pkl"
 A_VOCAB_PATH   = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\2-Data Analysis & Preprocessing\answer_vocab_V4.pkl"
 YOLO_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\New folder\Yolo_dataset\best.pt"
@@ -192,7 +173,6 @@ def load_vqa_assets(model_path, q_vocab_path, a_vocab_path):
             "masked_accuracy": masked_accuracy,
         }
     )
-
     with open(q_vocab_path, "rb") as f:
         Q_vocab = pickle.load(f)
     with open(a_vocab_path, "rb") as f:
@@ -270,11 +250,10 @@ def generate_answer(image: Image.Image, question: str, vqa_assets) -> str:
 # YOLO INFERENCE
 # ==================================
 def run_yolo(image: Image.Image, model, conf: float):
-    rgb = np.array(image.convert("RGB"))
-    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-
-    results    = model.predict(bgr, conf=conf, verbose=False)
-    plotted    = results[0].plot()
+    rgb         = np.array(image.convert("RGB"))
+    bgr         = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    results     = model.predict(bgr, conf=conf, verbose=False)
+    plotted     = results[0].plot()
     plotted_rgb = cv2.cvtColor(plotted, cv2.COLOR_BGR2RGB)
 
     detections = []
@@ -293,18 +272,29 @@ def run_yolo(image: Image.Image, model, conf: float):
     return plotted_rgb, detections
 
 # ==================================
+# SESSION STATE
+# ==================================
+if "selected_example" not in st.session_state:
+    st.session_state["selected_example"] = ""
+
+# ==================================
 # SIDEBAR
 # ==================================
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
 
-    use_yolo = st.toggle("Enable YOLO Detection", value=True)
+    use_yolo = st.toggle(
+        "Enable YOLO Detection",
+        value=True,
+        key="yolo_toggle"
+    )
 
     if use_yolo:
         conf_threshold = st.slider(
             "YOLO Confidence Threshold",
             min_value=0.05, max_value=1.0,
-            value=0.25, step=0.05
+            value=0.25, step=0.05,
+            key="yolo_conf_slider"
         )
     else:
         conf_threshold = 0.25
@@ -362,14 +352,14 @@ with col_left:
     uploaded_file = st.file_uploader(
         "Choose an image",
         type=["jpg", "jpeg", "png", "webp"],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="file_uploader"
     )
 
     if uploaded_file:
         image = Image.open(uploaded_file).convert("RGB")
         st.image(image, use_container_width=True, caption="Uploaded Image")
 
-        # Image info
         w, h = image.size
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -382,14 +372,6 @@ with col_left:
 with col_right:
     st.markdown('<div class="section-header">💬 Ask a Question</div>', unsafe_allow_html=True)
 
-    question = st.text_input(
-        "Your question:",
-        placeholder="What is the main subject of the image?",
-        label_visibility="collapsed",
-        key="question_input"
-    )
-
-    # Example questions
     st.markdown("<p style='color:#6b7280;font-size:12px;margin-top:8px'>💡 Examples:</p>", unsafe_allow_html=True)
     examples = [
         "What is the main subject?",
@@ -397,14 +379,29 @@ with col_right:
         "Is this indoors or outdoors?",
         "What is happening in the image?",
     ]
+
     ex_cols = st.columns(2)
     for i, ex in enumerate(examples):
         with ex_cols[i % 2]:
-            if st.button(ex, key=f"ex_{i}"):
-                st.session_state["question_input"] = ex
+            if st.button(ex, key=f"ex_btn_{i}"):
+                st.session_state["selected_example"] = ex
+                st.rerun()
+
+    question = st.text_input(
+        "Your question:",
+        value=st.session_state["selected_example"],
+        placeholder="What is the main subject of the image?",
+        label_visibility="collapsed",
+        key="question_input"
+    )
 
     st.markdown("<br>", unsafe_allow_html=True)
-    predict_btn = st.button("🔍 Predict", type="primary", disabled=(uploaded_file is None or not question.strip()))
+    predict_btn = st.button(
+        "🔍 Predict",
+        type="primary",
+        key="predict_btn",
+        disabled=(uploaded_file is None or not question.strip())
+    )
 
     # ==================================
     # PREDICTION
@@ -412,19 +409,16 @@ with col_right:
     if predict_btn and uploaded_file and question.strip():
         with st.spinner("Running models..."):
 
-            # VQA
             if vqa_assets:
                 answer = generate_answer(image, question, vqa_assets)
             else:
                 answer = "VQA model not loaded."
 
-            # YOLO
             if use_yolo and yolo_model:
                 detected_img, detections = run_yolo(image, yolo_model, conf_threshold)
             else:
                 detected_img, detections = None, []
 
-        # Answer
         st.markdown(f"""
         <div class="answer-box">
             <div class="answer-label">Answer</div>
@@ -432,7 +426,6 @@ with col_right:
         </div>
         """, unsafe_allow_html=True)
 
-        # YOLO Results
         if use_yolo:
             st.markdown('<div class="section-header">🎯 YOLO Detection</div>', unsafe_allow_html=True)
 
@@ -446,7 +439,7 @@ with col_right:
                         st.markdown(f"""
                         <div class="detection-card">
                             <span>🏷️ {d['class']}</span>
-                            <span style="color:#5b6af0">{conf_pct}%</span>
+                            <span style="color:#5b6af0;float:right">{conf_pct}%</span>
                         </div>
                         """, unsafe_allow_html=True)
                 else:
