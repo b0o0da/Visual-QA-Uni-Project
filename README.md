@@ -79,14 +79,6 @@ The app is built with **Streamlit** and supports:
 ### Run Locally
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/b0o0da/Visual-QA-Uni-Project.git
-cd Visual-QA-Uni-Project/5-Model\ Deployment/
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Run the app
 streamlit run "5-Model Deployment.py"
 ```
 
