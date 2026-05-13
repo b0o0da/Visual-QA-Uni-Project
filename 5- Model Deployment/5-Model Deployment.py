@@ -8,36 +8,161 @@ import streamlit as st
 import tensorflow as tf
 from PIL import Image
 from tensorflow.keras.models import load_model
-from ultralytics import YOLO
 
 # ==================================
 # PAGE CONFIG
 # ==================================
-st.set_page_config(page_title="Image Captioning + YOLO Detection", layout="wide")
-st.title("Image Captioning + Object Detection")
-st.write("Upload one image, then run both models together.")
+st.set_page_config(
+    page_title="Visual Question Answering",
+    page_icon="🔍",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # ==================================
-# PATHS
+# CUSTOM CSS
 # ==================================
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
+h1, h2, h3 { font-family: 'Space Mono', monospace !important; }
+
+.main { background: #0d0f14; }
+[data-testid="stSidebar"] {
+    background: #13151c !important;
+    border-right: 1px solid #2a2d3a;
+}
+
+.hero {
+    background: linear-gradient(135deg, #1a1d28 0%, #1e2235 100%);
+    border: 1px solid #2a2d3a;
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    text-align: center;
+}
+.hero h1 {
+    color: #e2e8f0;
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+.hero p {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.card {
+    background: linear-gradient(135deg, #1a1d28 0%, #1e2235 100%);
+    border: 1px solid #2a2d3a;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+}
+.card:hover { border-color: #5b6af0; }
+
+.answer-box {
+    background: linear-gradient(135deg, #1a1d28 0%, #1e2235 100%);
+    border: 2px solid #5b6af0;
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    margin-top: 16px;
+}
+.answer-label {
+    color: #6b7280;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+.answer-text {
+    color: #e2e8f0;
+    font-size: 22px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+}
+
+.detection-card {
+    background: #1a1d28;
+    border-left: 3px solid #f0856b;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 16px;
+    margin-bottom: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: #a0aec0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.section-header {
+    background: linear-gradient(90deg, #5b6af0 0%, transparent 100%);
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin: 20px 0 12px 0;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #e2e8f0;
+}
+
+.metric-card {
+    background: #1a1d28;
+    border: 1px solid #2a2d3a;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+}
+.metric-label { color: #6b7280; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+.metric-value { color: #e2e8f0; font-size: 22px; font-family: 'Space Mono', monospace; font-weight: 700; }
+
+.stButton > button {
+    background: linear-gradient(135deg, #5b6af0, #818cf8);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 32px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    width: 100%;
+    transition: opacity 0.2s;
+}
+.stButton > button:hover { opacity: 0.85; }
+
+[data-testid="stFileUploader"] {
+    background: #1a1d28;
+    border: 2px dashed #2a2d3a;
+    border-radius: 12px;
+    padding: 20px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ==================================
+# CONSTANTS
+# ==================================
+IMG_SIZE  = 224
+Q_MAX_LEN = 32
+A_MAX_LEN = 12
+
+# ==================================
+# PATHS — غيّر دول للمسارات الصح عندك
+# ==================================
+VQA_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\3-Model Training\best_vqa_model.keras"
+Q_VOCAB_PATH   = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\2-Data Analysis & Preprocessing\question_vocab_V4.pkl"
+A_VOCAB_PATH   = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\2-Data Analysis & Preprocessing\answer_vocab_V4.pkl"
 YOLO_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\New folder\Yolo_dataset\best.pt"
-CAPTION_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\New folder\Yolo_dataset\Last Model.keras"
-VOCAB_PATH = r"C:\Users\Boda\Documents\GitHub\New folder\Yolo_dataset\vocab.pkl"
 
 # ==================================
-# CONFIG FROM YOUR NOTEBOOK
-# ==================================
-IMG_SIZE = 224
-MAX_LEN = 35
-START_TOKEN = "start"
-END_TOKEN = "end"
-
-# ==================================
-# CUSTOM OBJECTS FROM NOTEBOOK
+# CUSTOM LOSS / ACCURACY
 # ==================================
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
-    from_logits=False,
-    reduction="none"
+    from_logits=False, reduction="none"
 )
 
 def masked_loss(y_true, y_pred):
@@ -48,150 +173,121 @@ def masked_loss(y_true, y_pred):
 
 def masked_accuracy(y_true, y_pred):
     y_pred_ids = tf.argmax(y_pred, axis=-1)
-    y_true = tf.cast(y_true, tf.int32)
+    y_true     = tf.cast(y_true, tf.int32)
     y_pred_ids = tf.cast(y_pred_ids, tf.int32)
-    matches = tf.cast(tf.equal(y_true, y_pred_ids), tf.float32)
-    mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
-    matches = matches * mask
+    matches    = tf.cast(tf.equal(y_true, y_pred_ids), tf.float32)
+    mask       = tf.cast(tf.not_equal(y_true, 0), tf.float32)
+    matches    = matches * mask
     return tf.reduce_sum(matches) / tf.reduce_sum(mask)
 
 # ==================================
-# HELPERS
-# ==================================
-def pil_to_rgb_array(image: Image.Image) -> np.ndarray:
-    return np.array(image.convert("RGB"))
-
-def pil_to_bgr(image: Image.Image) -> np.ndarray:
-    rgb = pil_to_rgb_array(image)
-    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-
-def bgr_to_rgb(image: np.ndarray) -> np.ndarray:
-    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-def preprocess_caption_image(image: Image.Image) -> np.ndarray:
-    img = image.convert("RGB").resize((IMG_SIZE, IMG_SIZE))
-    arr = np.array(img, dtype=np.float32)
-    arr = tf.keras.applications.efficientnet.preprocess_input(arr)
-    return np.expand_dims(arr, axis=0)
-
-def build_word_mappings(vocab: List[str]):
-    word_to_idx = {word: idx for idx, word in enumerate(vocab)}
-    idx_to_word = {idx: word for idx, word in enumerate(vocab)}
-    return word_to_idx, idx_to_word
-
-# ==================================
-# LOAD MODELS
+# LOAD VQA MODEL
 # ==================================
 @st.cache_resource
-def load_yolo_model(model_path: str):
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"YOLO model not found: {model_path}")
-    return YOLO(model_path)
-
-@st.cache_resource
-def load_caption_assets(model_path: str, vocab_path: str):
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Caption model not found: {model_path}")
-    if not os.path.exists(vocab_path):
-        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
-
+def load_vqa_assets(model_path, q_vocab_path, a_vocab_path):
     model = load_model(
         model_path,
         custom_objects={
-            "masked_loss": masked_loss,
+            "masked_loss"    : masked_loss,
             "masked_accuracy": masked_accuracy,
-        },
+        }
     )
 
-    with open(vocab_path, "rb") as f:
-        vocab = pickle.load(f)
+    with open(q_vocab_path, "rb") as f:
+        Q_vocab = pickle.load(f)
+    with open(a_vocab_path, "rb") as f:
+        A_vocab = pickle.load(f)
 
-    word_to_idx, idx_to_word = build_word_mappings(vocab)
+    Q_vectorizer = tf.keras.layers.TextVectorization(
+        max_tokens=len(Q_vocab),
+        output_mode="int",
+        output_sequence_length=Q_MAX_LEN
+    )
+    Q_vectorizer.set_vocabulary(Q_vocab)
+
+    A_idx_to_word = np.array(A_vocab)
+    A_word_to_idx = {w: i for i, w in enumerate(A_vocab)}
 
     return {
-        "model": model,
-        "vocab": vocab,
-        "word_to_idx": word_to_idx,
-        "idx_to_word": idx_to_word,
+        "model"         : model,
+        "Q_vectorizer"  : Q_vectorizer,
+        "A_idx_to_word" : A_idx_to_word,
+        "A_word_to_idx" : A_word_to_idx,
     }
 
 # ==================================
-# CAPTION INFERENCE
-# NOTE:
-# This uses greedy decoding because the uploaded notebooks
-# did not include a separate beam search inference function.
+# LOAD YOLO MODEL
 # ==================================
-def generate_caption(image: Image.Image, caption_assets) -> str:
-    model = caption_assets["model"]
-    word_to_idx = caption_assets["word_to_idx"]
-    idx_to_word = caption_assets["idx_to_word"]
+@st.cache_resource
+def load_yolo(model_path):
+    from ultralytics import YOLO
+    return YOLO(model_path)
 
-    if START_TOKEN not in word_to_idx or END_TOKEN not in word_to_idx:
-        return "Vocab is missing 'start' or 'end' token."
+# ==================================
+# VQA INFERENCE
+# ==================================
+def generate_answer(image: Image.Image, question: str, vqa_assets) -> str:
+    model         = vqa_assets["model"]
+    Q_vectorizer  = vqa_assets["Q_vectorizer"]
+    A_idx_to_word = vqa_assets["A_idx_to_word"]
+    A_word_to_idx = vqa_assets["A_word_to_idx"]
 
-    image_tensor = preprocess_caption_image(image)
+    img = image.convert("RGB").resize((IMG_SIZE, IMG_SIZE))
+    img = np.array(img, dtype=np.float32)
+    img = tf.keras.applications.efficientnet.preprocess_input(img)
+    img = np.expand_dims(img, axis=0)
 
-    start_id = word_to_idx[START_TOKEN]
-    end_id = word_to_idx[END_TOKEN]
+    q_seq    = Q_vectorizer(tf.constant([question]))
+    q_seq    = q_seq[:, :Q_MAX_LEN - 1]
+    pad_size = (Q_MAX_LEN - 1) - tf.shape(q_seq)[1]
+    q_seq    = tf.pad(q_seq, [[0, 0], [0, pad_size]])
 
-    decoder_input = np.zeros((1, MAX_LEN - 1), dtype=np.int32)
-    decoder_input[0, 0] = start_id
+    start_id = A_word_to_idx.get("start", 1)
+    end_id   = A_word_to_idx.get("end",   2)
 
-    generated_ids = []
+    answer_ids = [start_id]
 
-    for t in range(MAX_LEN - 2):
-        preds = model.predict([image_tensor, decoder_input], verbose=0)
+    for _ in range(A_MAX_LEN - 1):
+        a_seq = tf.keras.preprocessing.sequence.pad_sequences(
+            [answer_ids], maxlen=A_MAX_LEN - 1, padding="post"
+        )
+        a_seq   = tf.cast(a_seq, tf.int32)
+        preds   = model.predict([img, q_seq, a_seq], verbose=0)
+        next_id = int(np.argmax(preds[0, len(answer_ids) - 1]))
 
-        # preds shape: (1, MAX_LEN-1, VOCAB_SIZE)
-        next_id = int(np.argmax(preds[0, t]))
-
-        if next_id == 0:
+        if next_id == end_id or next_id == 0:
             break
-        if next_id == end_id:
-            break
+        answer_ids.append(next_id)
 
-        generated_ids.append(next_id)
-
-        if t + 1 < MAX_LEN - 1:
-            decoder_input[0, t + 1] = next_id
-
-    words = []
-    for idx in generated_ids:
-        word = idx_to_word.get(idx, "")
-        if not word or word in {START_TOKEN, END_TOKEN}:
-            continue
-        words.append(word)
-
-    if not words:
-        return "No caption generated."
-
-    return " ".join(words)
+    words = [
+        A_idx_to_word[i]
+        for i in answer_ids
+        if i not in [0, start_id, end_id] and i < len(A_idx_to_word)
+    ]
+    return " ".join(words) if words else "No answer generated."
 
 # ==================================
 # YOLO INFERENCE
 # ==================================
-def run_yolo_detection(
-    image: Image.Image,
-    model,
-    conf_threshold: float = 0.25
-) -> Tuple[np.ndarray, list]:
-    bgr = pil_to_bgr(image)
-    results = model.predict(bgr, conf=conf_threshold, verbose=False)
+def run_yolo(image: Image.Image, model, conf: float):
+    rgb = np.array(image.convert("RGB"))
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
-    plotted = results[0].plot()
-    plotted_rgb = bgr_to_rgb(plotted)
+    results    = model.predict(bgr, conf=conf, verbose=False)
+    plotted    = results[0].plot()
+    plotted_rgb = cv2.cvtColor(plotted, cv2.COLOR_BGR2RGB)
 
     detections = []
-    boxes = results[0].boxes
-    names = model.names
+    boxes      = results[0].boxes
+    names      = model.names
 
     if boxes is not None:
         for box in boxes:
             cls_id = int(box.cls[0].item())
-            conf = float(box.conf[0].item())
+            conf_v = float(box.conf[0].item())
             detections.append({
-                "class": names[cls_id],
-                "confidence": round(conf, 4)
+                "class"     : names[cls_id],
+                "confidence": round(conf_v, 4)
             })
 
     return plotted_rgb, detections
@@ -199,86 +295,171 @@ def run_yolo_detection(
 # ==================================
 # SIDEBAR
 # ==================================
-st.sidebar.header("Settings")
-conf_threshold = st.sidebar.slider(
-    "YOLO confidence threshold",
-    min_value=0.05,
-    max_value=1.00,
-    value=0.25,
-    step=0.05
-)
+with st.sidebar:
+    st.markdown("## ⚙️ Settings")
+
+    use_yolo = st.toggle("Enable YOLO Detection", value=True)
+
+    if use_yolo:
+        conf_threshold = st.slider(
+            "YOLO Confidence Threshold",
+            min_value=0.05, max_value=1.0,
+            value=0.25, step=0.05
+        )
+    else:
+        conf_threshold = 0.25
+
+    st.markdown("---")
+    st.markdown("""
+    <div style="color:#4b5563;font-size:11px;line-height:1.8">
+    🔍 Visual Question Answering<br>
+    🎯 YOLO Object Detection<br>
+    🧠 EfficientNetB5 + Seq2Seq
+    </div>
+    """, unsafe_allow_html=True)
 
 # ==================================
-# LOAD RESOURCES
+# HERO
 # ==================================
+st.markdown("""
+<div class="hero">
+    <h1>🔍 Visual Question Answering</h1>
+    <p>Upload an image, ask a question, and get an AI-powered answer</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ==================================
+# LOAD MODELS
+# ==================================
+vqa_assets = None
+yolo_model = None
+vqa_error  = None
 yolo_error = None
-caption_error = None
 
 try:
-    yolo_model = load_yolo_model(YOLO_MODEL_PATH)
+    vqa_assets = load_vqa_assets(VQA_MODEL_PATH, Q_VOCAB_PATH, A_VOCAB_PATH)
 except Exception as e:
-    yolo_model = None
-    yolo_error = str(e)
+    vqa_error = str(e)
 
-try:
-    caption_assets = load_caption_assets(CAPTION_MODEL_PATH, VOCAB_PATH)
-except Exception as e:
-    caption_assets = None
-    caption_error = str(e)
+if use_yolo:
+    try:
+        yolo_model = load_yolo(YOLO_MODEL_PATH)
+    except Exception as e:
+        yolo_error = str(e)
 
+if vqa_error:
+    st.error(f"VQA Model Error: {vqa_error}")
 if yolo_error:
-    st.error(yolo_error)
-
-if caption_error:
-    st.error(caption_error)
+    st.warning(f"YOLO Model Error: {yolo_error}")
 
 # ==================================
-# FILE UPLOAD
+# MAIN LAYOUT
 # ==================================
-uploaded_file = st.file_uploader(
-    "Upload image",
-    type=["jpg", "jpeg", "png", "webp"]
-)
+col_left, col_right = st.columns([1, 1], gap="large")
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
+with col_left:
+    st.markdown('<div class="section-header">📁 Upload Image</div>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader(
+        "Choose an image",
+        type=["jpg", "jpeg", "png", "webp"],
+        label_visibility="collapsed"
+    )
 
-    st.subheader("Uploaded Image")
-    st.image(image, use_container_width=False)
+    if uploaded_file:
+        image = Image.open(uploaded_file).convert("RGB")
+        st.image(image, use_container_width=True, caption="Uploaded Image")
 
-    if st.button("Predict", type="primary"):
-        col1, col2 = st.columns(2)
+        # Image info
+        w, h = image.size
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown(f'<div class="metric-card"><div class="metric-label">Width</div><div class="metric-value">{w}px</div></div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown(f'<div class="metric-card"><div class="metric-label">Height</div><div class="metric-value">{h}px</div></div>', unsafe_allow_html=True)
+        with c3:
+            st.markdown(f'<div class="metric-card"><div class="metric-label">Format</div><div class="metric-value">{image.format or "RGB"}</div></div>', unsafe_allow_html=True)
 
-        with st.spinner("Running both models..."):
-            if caption_assets is not None:
-                caption_text = generate_caption(image, caption_assets)
+with col_right:
+    st.markdown('<div class="section-header">💬 Ask a Question</div>', unsafe_allow_html=True)
+
+    question = st.text_input(
+        "Your question:",
+        placeholder="What is the main subject of the image?",
+        label_visibility="collapsed",
+        key="question_input"
+    )
+
+    # Example questions
+    st.markdown("<p style='color:#6b7280;font-size:12px;margin-top:8px'>💡 Examples:</p>", unsafe_allow_html=True)
+    examples = [
+        "What is the main subject?",
+        "What color is dominant?",
+        "Is this indoors or outdoors?",
+        "What is happening in the image?",
+    ]
+    ex_cols = st.columns(2)
+    for i, ex in enumerate(examples):
+        with ex_cols[i % 2]:
+            if st.button(ex, key=f"ex_{i}"):
+                st.session_state["question_input"] = ex
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    predict_btn = st.button("🔍 Predict", type="primary", disabled=(uploaded_file is None or not question.strip()))
+
+    # ==================================
+    # PREDICTION
+    # ==================================
+    if predict_btn and uploaded_file and question.strip():
+        with st.spinner("Running models..."):
+
+            # VQA
+            if vqa_assets:
+                answer = generate_answer(image, question, vqa_assets)
             else:
-                caption_text = "Caption model not loaded."
+                answer = "VQA model not loaded."
 
-            if yolo_model is not None:
-                detected_image, detections = run_yolo_detection(
-                    image=image,
-                    model=yolo_model,
-                    conf_threshold=conf_threshold,
-                )
+            # YOLO
+            if use_yolo and yolo_model:
+                detected_img, detections = run_yolo(image, yolo_model, conf_threshold)
             else:
-                detected_image, detections = None, []
+                detected_img, detections = None, []
 
-        with col1:
-            st.subheader("Image Captioning Output")
-            st.success(caption_text)
+        # Answer
+        st.markdown(f"""
+        <div class="answer-box">
+            <div class="answer-label">Answer</div>
+            <div class="answer-text">{answer}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with col2:
-            st.subheader("YOLO Detection Output")
-            if detected_image is not None:
-                st.image(detected_image, use_container_width=True)
+        # YOLO Results
+        if use_yolo:
+            st.markdown('<div class="section-header">🎯 YOLO Detection</div>', unsafe_allow_html=True)
+
+            if detected_img is not None:
+                st.image(detected_img, use_container_width=True, caption="Detected Objects")
+
+                if detections:
+                    st.markdown(f"**{len(detections)} object(s) detected:**")
+                    for d in detections:
+                        conf_pct = int(d['confidence'] * 100)
+                        st.markdown(f"""
+                        <div class="detection-card">
+                            <span>🏷️ {d['class']}</span>
+                            <span style="color:#5b6af0">{conf_pct}%</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("No objects detected.", icon="ℹ️")
             else:
                 st.warning("YOLO model not loaded.")
 
-        st.subheader("Detected Objects")
-        if detections:
-            st.dataframe(detections, use_container_width=True)
-        else:
-            st.write("No detections found.")
-
+# ==================================
+# FOOTER
+# ==================================
 st.markdown("---")
+st.markdown("""
+<div style="text-align:center;color:#4b5563;font-size:11px;font-family:'Space Mono',monospace">
+Visual Question Answering · EfficientNetB5 + Seq2Seq · YOLO Detection
+</div>
+""", unsafe_allow_html=True)
