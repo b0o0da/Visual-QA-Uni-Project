@@ -132,12 +132,12 @@ Q_MAX_LEN = 32
 A_MAX_LEN = 12
 
 # ==================================
-# PATHS — غيّر دول للمسارات الصح عندك
+# PATHS
 # ==================================
-VQA_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\3-Model Architecture\best_vqa_model_ft.keras"
-Q_VOCAB_PATH   = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\2-Data Analysis & Preprocessing\question_vocab_V4.pkl"
-A_VOCAB_PATH   = r"C:\Users\Boda\Documents\GitHub\Visual QA UNI Project\2-Data Analysis & Preprocessing\answer_vocab_V4.pkl"
-YOLO_MODEL_PATH = r"C:\Users\Boda\Documents\GitHub\New folder\Yolo_dataset\best.pt"
+VQA_MODEL_PATH = r"Model.keras"
+Q_VOCAB_PATH   = r"question_vocab_V4.pkl"
+A_VOCAB_PATH   = r"answer_vocab_V4.pkl"
+YOLO_MODEL_PATH = r"best.pt"
 
 # ==================================
 # CUSTOM LOSS / ACCURACY
@@ -212,20 +212,21 @@ def generate_answer(image: Image.Image, question: str, vqa_assets) -> str:
     A_idx_to_word = vqa_assets["A_idx_to_word"]
     A_word_to_idx = vqa_assets["A_word_to_idx"]
 
+    # Preprocess image
     img = image.convert("RGB").resize((IMG_SIZE, IMG_SIZE))
     img = np.array(img, dtype=np.float32)
     img = tf.keras.applications.efficientnet.preprocess_input(img)
     img = np.expand_dims(img, axis=0)
 
+    # Preprocess question
     q_seq    = Q_vectorizer(tf.constant([question]))
     q_seq    = q_seq[:, :Q_MAX_LEN - 1]
     pad_size = (Q_MAX_LEN - 1) - tf.shape(q_seq)[1]
     q_seq    = tf.pad(q_seq, [[0, 0], [0, pad_size]])
 
-    start_id = A_word_to_idx.get("start", 1)
-    end_id   = A_word_to_idx.get("end",   2)
-
-    answer_ids = [start_id]
+    # ✅ start مش موجود فنبدأ بـ index 2 (أول كلمة حقيقية بعد padding و UNK)
+    end_id     = A_word_to_idx.get("end", 1521)  # ✅ end موجود في 1521
+    answer_ids = [2]  # ✅ ابدأ بأول كلمة حقيقية
 
     for _ in range(A_MAX_LEN - 1):
         a_seq = tf.keras.preprocessing.sequence.pad_sequences(
@@ -235,15 +236,19 @@ def generate_answer(image: Image.Image, question: str, vqa_assets) -> str:
         preds   = model.predict([img, q_seq, a_seq], verbose=0)
         next_id = int(np.argmax(preds[0, len(answer_ids) - 1]))
 
+        # ✅ وقف عند end token أو padding
         if next_id == end_id or next_id == 0:
             break
+
         answer_ids.append(next_id)
 
+    # ✅ استثني الـ padding و UNK و end
     words = [
         A_idx_to_word[i]
         for i in answer_ids
-        if i not in [0, start_id, end_id] and i < len(A_idx_to_word)
+        if i not in [0, 1, 2, end_id] and i < len(A_idx_to_word)
     ]
+
     return " ".join(words) if words else "No answer generated."
 
 # ==================================
@@ -358,7 +363,7 @@ with col_left:
 
     if uploaded_file:
         image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, use_container_width=True, caption="Uploaded Image")
+        st.image(image, width=200, caption="Uploaded Image")
 
         w, h = image.size
         c1, c2, c3 = st.columns(3)
@@ -430,7 +435,7 @@ with col_right:
             st.markdown('<div class="section-header">🎯 YOLO Detection</div>', unsafe_allow_html=True)
 
             if detected_img is not None:
-                st.image(detected_img, use_container_width=True, caption="Detected Objects")
+                st.image(detected_img, width=400, caption="Detected Objects")
 
                 if detections:
                     st.markdown(f"**{len(detections)} object(s) detected:**")
