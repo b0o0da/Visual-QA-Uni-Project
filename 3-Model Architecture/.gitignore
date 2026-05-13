@@ -10,3 +10,4 @@ YOLO.yolov8.zip
 vocab.pkl
 vectorizer.pkl
 3-Model Architecture_.ipynb
+*.csv
