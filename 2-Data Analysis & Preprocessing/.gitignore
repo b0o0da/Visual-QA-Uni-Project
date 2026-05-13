@@ -1,3 +1,5 @@
 vocab.pkl
 dataset_split
 dataset_images
+answer_vocab.pkl
+question_vocab.pkl
